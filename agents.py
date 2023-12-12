@@ -93,6 +93,7 @@ class GameState():
         self.water_positions = []
         # weights :
         self.wi = [0 for i in range(7)]
+        # features
         self.f = []
         self.f.append(self.distance_water)
         self.f.append(self.distance_dog)
@@ -103,6 +104,11 @@ class GameState():
         self.f.append(self.drink_level)
 
         self.Q = lambda s, a: sum([self.wi[j] * self.f[j](s, a) for j in range(7)])
+
+    def save_weights(self, filename):
+        with open(filename, 'w') as file:
+            for weight in self.state.wi:
+                file.write(f"{weight}\n")
 
     def distance_manhattan(self, x1, y1, x2, y2):
         return abs(x1 - x2) + abs(y1 - y2)
@@ -315,13 +321,14 @@ class RationalBrain( TortoiseBrain ):
         sensor.tortoise_direction: the tortoise direction between 0 (north), 1 (east), 2 (south), and 3 (west).
         """
 
+
         if (self.previous_state is not None and self.previous_action is not None):
             self.update(self.previous_action, self.state, self.reward(self.previous_action))
 
         self.state.update_state_from_sensor(sensor)
         self.previous_state = self.state
 
-        self.state.display()
+        #self.state.display()
         action = self.getAction(self.state)
         self.previous_action = action
         return action

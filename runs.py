@@ -21,8 +21,8 @@ def runs( agent, width, number ):
     wins = 0
     meanScore = 0 
     random.seed(0)
+    tortoise = agent()
     for i in range(number):
-        tortoise = agent()
         tortoise.init(width)
         tf = TortoiseFrame(width, 0, tortoise, True)
         print("Score:", tf.tw.score, "Time:", tf.tw.current_time)

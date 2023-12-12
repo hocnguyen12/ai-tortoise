@@ -89,6 +89,18 @@ class GameState():
             self.size = grid_size
             self.worldmap = [ [  ((y in [0, self.size - 1] or  x in [0, self.size - 1]) and WALL) or UNKNOWN
                                  for x in range(self.size) ] for y in range(self.size) ]
+        # weights :
+        wi = [0 for i in range(7)]
+        f = []
+        f.append(lambda s, a:)  # distance de la mare la plus proche
+        f.append(lambda s, a:)  # distance au chien
+        f.append(lambda s, a:)  # distance de la laitue la plus proche
+        f.append(lambda s, a:)  # taux d'exploration
+        f.append(lambda s, a:)  # nbre de laitue restant
+        f.append(lambda s, a: s.health_level)  # pt de vie
+        f.append(lambda s, a: s.drink_level)  # pt de soif
+        Q = lambda s, a: sum([self.wi[j] * self.f[j](s, a) for j in range(7)])
+
     def __deepcopy__( self, memo ):
         state = GameState()
         state.size = self.size
@@ -162,7 +174,114 @@ class RationalBrain( TortoiseBrain ):
 
     def init( self, grid_size ):
         self.state = GameState(grid_size)
-        # *** YOUR CODE HERE ***"
+        self.alpha = float(0.5)
+        self.epsilon = float(0.5)
+        self.gamma = float(1)
+
+
+    def distance_manhattan(self, x1, y1, x2, y2):
+        return abs(x1 - x2) + abs(y1 - y2)
+
+    def update(self, state, action, nextState, reward, sensor):
+        """
+        The parent class calls this to observe a
+        state = action => nextState and reward transition.
+        You should do your Q-Value update here.
+
+        Useful attributes and methods:
+        - self.alpha (learning rate)
+        - self.discount (discount rate)
+        - self.QValues[state, action] (the Qvalue Q(s,a))
+        """
+
+        # *** YOUR CODE HERE ***
+
+        for i in range(7):
+            difference = reward + self.gamma * self.computeValueFromQValues(nextState, sensor) - self.Q(state,action)
+            self.wi[i] += self.alpha * difference * self.f[i](state, action)
+
+    def computeValueFromQValues(self, state, sensor): # U(s)
+        """
+        Returns max_action Q(state,action)
+        where the max is over legal actions.
+        V(s) = max_a Q(s,a)
+        Note that if there are no legal actions, which is the case at the
+        terminal state, you should return a value of 0.0.
+
+        Useful attributes and methods:
+        - self.alpha (learning rate)
+        - self.discount (discount rate)
+        - self.QValues[state, action] (the Qvalue Q(s,a))
+        - self.getLegalActions(state): returns legal actions for a state
+        """
+
+        U = 0  # Note: if there are no legal actions, which is the case at the terminal state, you should return a value of 0.
+        for a in self.getLegalActions(state, sensor):
+            if self.Q(state, a) > U:
+                U = self.Q(state, a)
+        return U
+
+    # actions : ['eat', 'drink', 'left', 'right', 'forward', 'wait']
+    def getLegalActions(self, state, sensor):
+        actions =  ['eat', 'drink', 'left', 'right', 'wait']
+        if (sensor.free_ahead):
+            actions.append('forward')
+        return actions
+
+    def computeActionFromQValues(self, state): # PI(s)
+        """
+        Comspute the best action to take in a state.
+        a = argmax_a Q(s,a)
+
+        Note that if there are no legal actions, which is the case at the terminal state,
+        you should return None.
+
+        Useful attributes and methods:
+        - self.QValues[state, action] (the Qvalue Q(s,a))
+        - self.getLegalActions(state): returns legal actions for a state
+        """
+
+        # *** YOUR CODE HERE ***
+
+        actions = []
+        action_max = self.getLegalActions(state)[0]
+        U = 0
+        for a in self.getLegalActions(state):
+            if self.Q(state, a) == U:
+                actions.append(a)
+            if self.Q(state, a) > U:
+                U = self.Q(state, a)
+                action_max = a
+        if len(actions) > 1:
+            return random.choice(actions)
+        return action_max
+
+    def getAction(self, state):
+        """
+        Computes the action to take in the current state.  With
+        probability self.epsilon, we should take a random action and
+        take the best policy action otherwise.
+
+        Note that if there are no legal actions, which is the case at
+        the terminal state, you should choose None as the action.
+
+        Instance variables you have access to
+          - self.epsilon (exploration probability)
+
+        HINT: You might want to use utils.flipCoin(prob)
+        HINT: To pick randomly from a list, use random.choice(list)
+        """
+
+        legalActions = self.getLegalActions(state)
+        if len(legalActions) == 0:
+            return None
+        # *** YOUR CODE HERE ***
+
+        if utils.flipCoin(self.epsilon):
+            action = random.choice(legalActions)
+        else:
+            action = self.computeActionFromQValues(state)
+        return action
 
     def think( self, sensor ):
         """
@@ -184,4 +303,223 @@ class RationalBrain( TortoiseBrain ):
         """
 
         # *** YOUR CODE HERE ***"
-        utils.raiseNotDefined()
+        self.state.update_state_from_sensor(sensor)
+        self.state.display()
+        return self.getAction(self.state)
+
+
+##################################################################################
+# Qvalues
+
+class Counter(dict):
+    """
+    A counter keeps track of counts for a set of keys.
+
+    The counter class is an extension of the standard python
+    dictionary type.  It is specialized to have number values
+    (integers or floats), and includes a handful of additional
+    functions to ease the task of counting data.  In particular,
+    all keys are defaulted to have value 0.  Using a dictionary:
+
+    a = {}
+    print a['test']
+
+    would give an error, while the Counter class analogue:
+
+    >>> a = Counter()
+    >>> print a['test']
+    0
+
+    returns the default 0 value. Note that to reference a key
+    that you know is contained in the counter,
+    you can still use the dictionary syntax:
+
+    >>> a = Counter()
+    >>> a['test'] = 2
+    >>> print a['test']
+    2
+
+    This is very useful for counting things without initializing their counts,
+    see for example:
+
+    >>> a['blah'] += 1
+    >>> print a['blah']
+    1
+
+    The counter also includes additional functionality useful in implementing
+    the classifiers for this assignment.  Two counters can be added,
+    subtracted or multiplied together.  See below for details.  They can
+    also be normalized and their total count and arg max can be extracted.
+    """
+    def __getitem__(self, idx):
+        self.setdefault(idx, 0)
+        return dict.__getitem__(self, idx)
+
+    def incrementAll(self, keys, count):
+        """
+        Increments all elements of keys by the same count.
+
+        >>> a = Counter()
+        >>> a.incrementAll(['one','two', 'three'], 1)
+        >>> a['one']
+        1
+        >>> a['two']
+        1
+        """
+        for key in keys:
+            self[key] += count
+
+    def argMax(self):
+        """
+        Returns the key with the highest value.
+        """
+        if len(self.keys()) == 0: return None
+        all = self.items()
+        values = [x[1] for x in all]
+        maxIndex = values.index(max(values))
+        return all[maxIndex][0]
+
+    def sortedKeys(self):
+        """
+        Returns a list of keys sorted by their values.  Keys
+        with the highest values will appear first.
+
+        >>> a = Counter()
+        >>> a['first'] = -2
+        >>> a['second'] = 4
+        >>> a['third'] = 1
+        >>> a.sortedKeys()
+        ['second', 'third', 'first']
+        """
+        sortedItems = self.items()
+        compare = lambda x, y:  sign(y[1] - x[1])
+        sortedItems.sort(cmp=compare)
+        return [x[0] for x in sortedItems]
+
+    def totalCount(self):
+        """
+        Returns the sum of counts for all keys.
+        """
+        return sum(self.values())
+
+    def normalize(self):
+        """
+        Edits the counter such that the total count of all
+        keys sums to 1.  The ratio of counts for all keys
+        will remain the same. Note that normalizing an empty
+        Counter will result in an error.
+        """
+        total = float(self.totalCount())
+        if total == 0: return
+        for key in self.keys():
+            self[key] = self[key] / total
+
+    def divideAll(self, divisor):
+        """
+        Divides all counts by divisor
+        """
+        divisor = float(divisor)
+        for key in self:
+            self[key] /= divisor
+
+    def copy(self):
+        """
+        Returns a copy of the counter
+        """
+        return Counter(dict.copy(self))
+
+    def __mul__(self, y ):
+        """
+        Multiplying two counters gives the dot product of their vectors where
+        each unique label is a vector element.
+
+        >>> a = Counter()
+        >>> b = Counter()
+        >>> a['first'] = -2
+        >>> a['second'] = 4
+        >>> b['first'] = 3
+        >>> b['second'] = 5
+        >>> a['third'] = 1.5
+        >>> a['fourth'] = 2.5
+        >>> a * b
+        14
+        """
+        sum = 0
+        x = self
+        if len(x) > len(y):
+            x,y = y,x
+        for key in x:
+            if key not in y:
+                continue
+            sum += x[key] * y[key]
+        return sum
+
+    def __radd__(self, y):
+        """
+        Adding another counter to a counter increments the current counter
+        by the values stored in the second counter.
+
+        >>> a = Counter()
+        >>> b = Counter()
+        >>> a['first'] = -2
+        >>> a['second'] = 4
+        >>> b['first'] = 3
+        >>> b['third'] = 1
+        >>> a += b
+        >>> a['first']
+        1
+        """
+        for key, value in y.items():
+            self[key] += value
+
+    def __add__( self, y ):
+        """
+        Adding two counters gives a counter with the union of all keys and
+        counts of the second added to counts of the first.
+
+        >>> a = Counter()
+        >>> b = Counter()
+        >>> a['first'] = -2
+        >>> a['second'] = 4
+        >>> b['first'] = 3
+        >>> b['third'] = 1
+        >>> (a + b)['first']
+        1
+        """
+        addend = Counter()
+        for key in self:
+            if key in y:
+                addend[key] = self[key] + y[key]
+            else:
+                addend[key] = self[key]
+        for key in y:
+            if key in self:
+                continue
+            addend[key] = y[key]
+        return addend
+
+    def __sub__( self, y ):
+        """
+        Subtracting a counter from another gives a counter with the union of all keys and
+        counts of the second subtracted from counts of the first.
+
+        >>> a = Counter()
+        >>> b = Counter()
+        >>> a['first'] = -2
+        >>> a['second'] = 4
+        >>> b['first'] = 3
+        >>> b['third'] = 1
+        >>> (a - b)['first']
+        -5
+        """
+        addend = Counter()
+        for key in self:
+            if key in y:
+                addend[key] = self[key] - y[key]
+            else:
+                addend[key] = self[key]
+        for key in y:
+            if key in self:
+                continue
+            addend[key] = -1 * y[key]
+        return addend

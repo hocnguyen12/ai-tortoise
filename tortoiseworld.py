@@ -228,10 +228,10 @@ class TortoiseWorld():
             self.win = True
         elif self.drink_level <= 0 or self.health <= 0:
             if self.drink_level <= 0:
-                print("You died of thirst!")
+                #print("You died of thirst!")
                 self.win = False
             else:
-                print("You died of ill health!")
+                #print("You died of ill health!")
                 self.win = False
             self.action = "stop"
             self.health = 0

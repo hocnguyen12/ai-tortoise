@@ -20,12 +20,19 @@ def runs( agent, width, number ):
     """ The real main. """
     wins = 0
     meanScore = 0 
-    random.seed(0)
+    random.seed(random.random())
     tortoise = agent()
     for i in range(number):
+        bar_length = 50
+        percent = (i / number) * 100
+        filled_length = int(bar_length * i // number)
+        bar = '#' * filled_length + ' ' * (bar_length - filled_length)
+
+        print(f'\rLearning iteration : {i} [{bar}] {percent:.2f}%', end='')
+
         tortoise.init(width)
         tf = TortoiseFrame(width, 0, tortoise, True)
-        print("Score:", tf.tw.score, "Time:", tf.tw.current_time)
+        #print("Score:", tf.tw.score, "Time:", tf.tw.current_time)
         meanScore += tf.tw.score
         if tf.is_win():
             wins += 1

@@ -123,6 +123,14 @@ class GameState():
 
     ##############################
     # Feature functions
+
+    def exploration_rate(self, state, action):
+        explored_ratio = sum(1 for row in self.worldmap for cell in row if cell != '?') / (len(self.worldmap) ** 2)
+        return explored_ratio
+
+    def distance_dog(self, state, action):
+        return self.distance_manhattan(self.x, self.y, self.dogx, self.dogy) / self.distance_manhattan(0, 0, self.size, self.size)
+
     def distance_water(self, state, action):
         if len(self.water_positions) == 0:
             return 1
@@ -130,9 +138,6 @@ class GameState():
         for pond in self.water_positions :
             distance = min(distance, self.distance_manhattan(self.x, self.y, pond[0], pond[1]))
         return distance / self.distance_manhattan(0, 0, self.size, self.size)
-
-    def distance_dog(self, state, action):
-        return self.distance_manhattan(self.x, self.y, self.dogx, self.dogy) / self.distance_manhattan(0, 0, self.size, self.size)
 
     def distance_lettuce(self, state, action):
         if len(self.lettuce_positions) == 0:
@@ -142,15 +147,17 @@ class GameState():
            distance = min(distance, self.distance_manhattan(self.x, self.y, lettuce[0], lettuce[1]))
         return distance / self.distance_manhattan(0, 0, self.size, self.size)
 
-    def exploration_rate(self, state, action):
-        explored = 0
-        for i in self.worldmap:
-            if i != '?':
-                explored += 1
-        return explored / (self.size * self.size)
+    def eaten_lettuce(self, state, action):
+        return self.eaten / 0.16 * (self.size * self.size)
+
+    def visited_ponds(self, state, action):
+        return len(self.water_positions) / (0.05 * self.size * self.size)
 
     def remaining_lettuce(self, state, action):
         return (0.16 * (self.size * self.size) - len(self.lettuce_positions)) / (0.16 * self.size * self.size)
+
+    def remaining_pond(self, state, action):
+        return (0.05 * (self.size * self.size) - len(self.water_positions)) / (0.05 * self.size * self.size)
 
     def health_level(self, state, action):
         return self.health_level / 100
@@ -196,17 +203,19 @@ class GameState():
         self.water_here =  sensor.water_here
         self.water_ahead = sensor.water_ahead
 
-
         # Update the map
         (directionx, directiony) = DIRECTIONTABLE[self.direction]
         if sensor.lettuce_here:
             self.worldmap[self.x][self.y] = LETTUCE
-            #self.lettuce_positions.append((self.x, self.y))
+            if (self.x, self.y) not in self.lettuce_positions:
+                self.lettuce_positions.append((self.x, self.y))
         elif sensor.water_here:
             self.worldmap[self.x][self.y] = POUND
-            #self.water_positions.append((self.x, self.y))
+            if (self.x, self.y) not in self.water_positions:
+                self.water_positions.append((self.x, self.y))
         else:
             self.worldmap[self.x][self.y] = GROUND
+
         if sensor.lettuce_ahead:
             self.worldmap[self.x + directionx][self.y + directiony] = LETTUCE
             if (self.x + directionx, self.y + directiony) not in self.lettuce_positions:
@@ -245,16 +254,16 @@ class RationalBrain( TortoiseBrain ):
 
     def init( self, grid_size ):
         self.state = GameState(grid_size)
-        self.alpha = 0.1
-        self.epsilon = 0.5
-        self.gamma = 0.7
+        self.alpha = float(0.3)
+        self.epsilon = float(0.5)
+        self.gamma = float(0.3)
         self.previous_state = None
         self.previous_action = None
 
         self.start_time = time.time()
         self.score = 0
 
-    def update(self, action, prevState, reward):
+    def     update(self, action, prevState, reward):
         for i in range(len(self.state.wi)):
             difference = reward + self.gamma * self.computeValueFromQValues(self.state) - prevState.Q(prevState,action)
             self.state.wi[i] += self.alpha * difference * prevState.f[i](prevState, action)
@@ -299,8 +308,8 @@ class RationalBrain( TortoiseBrain ):
             return None
 
         if self.flipCoin(self.epsilon):
-            if 'forward' in legalActions and self.state.free_ahead:
-                legalActions.append('forward')
+            #if 'forward' in legalActions and self.state.free_ahead:
+            #    legalActions.append('forward')
             action = random.choice(legalActions)
         else:
             action = self.computeActionFromQValues(state, legalActions)
@@ -339,10 +348,12 @@ class RationalBrain( TortoiseBrain ):
         action = self.getAction(self.state)
 
         if self.state.lettuce_here and action == 'eat':
+            index = self.state.lettuce_positions.index((self.state.x, self.state.y))
+            self.state.lettuce_positions.pop(index)
             self.state.eaten += 1
-        self.compute_score()
+        #self.compute_score()
 
-        #self.state.display()
+        self.state.display()
         self.previous_action = action
         self.state.save_weights("weights.txt")
 
@@ -358,98 +369,64 @@ class RationalBrain( TortoiseBrain ):
     def reward(self, action):
         reward = 0
 
-        if self.score < 0 :
-            reward -= 3
-        else :
-            reward += 3
+        # SCORE LAITUES
+        if self.state.remaining_lettuce(self.state, action) > 0.5:
+            reward += 10
+        elif self.state.remaining_lettuce(self.state, action) > 0.8:
+            reward += 15
 
-        # Gérer manger de la laitue
+        # MANGER LAITUES
         if self.state.lettuce_here:
-            reward += 8 if action == 'eat' else -8
+            reward += 50 if action == 'eat' else -50
 
-        # Encourager à avancer vers la laitue
+        # ALLER SUR LES LAITUES
         if self.state.lettuce_ahead:
             if action == 'forward':
                 reward += 5
             else :
                 reward -= 5
 
+        # BOIRE DE LEAU
         if self.state.water_here:
             if action == 'drink':
                 if self.state.drink_level < 20:
-                    reward += 0.8
+                    reward += 15
                 elif self.state.drink_level < 50:
-                    reward += 0.5
+                    reward += 10
                 elif self.state.drink_level < 75:
-                    reward += 0.2
+                    reward += 7
 
-        if self.state.drink_level < 20:
+        # NE PAS RESTER AVEC SOIF
+        if self.state.drink_level < 40:
             reward -= 3
 
+        # FAVORISE L'EXPLORATION
         explored_ratio = sum(1 for row in self.state.worldmap for cell in row if cell != '?') / (len(self.state.worldmap) ** 2)
-        if explored_ratio < 0.2:
-            reward -= 0.8
+        if explored_ratio < 0.5:
+            reward -= 8
         elif explored_ratio > 0.5:
-            reward += 0.8
-        elif explored_ratio > 0.7:
-            reward += 1.3
+            reward += 10
+        elif explored_ratio > 0.8:
+            reward += 20
 
-        # Pénaliser la proximité du chien, en particulier si la santé est faible
+        print("exploration rate : ", explored_ratio)
+
+        # PROXIMITE DU CHIEN, SANTE FAIBLE
         dog_distance = self.state.distance_manhattan(self.state.x, self.state.y, self.state.dogx, self.state.dogy)
         if dog_distance < 3 :
-            reward -= 5
+            reward -= 15
         elif dog_distance <= 5 :
-            reward -= 2
+            reward -= 10
             #if self.state.health_level < 20:
             #    reward -= 0.5
-
+        print("dog_distance : ", dog_distance)
+        # MEME CASE QUE LE CHIEN
         if self.state.x == self.state.dogx and self.state.y == self.state.dogy:
-            if action == 'forward':
-                reward += 3
-            else :
-                reward -= 3
+            reward -= 20
 
+        print("immediate reward :", reward)
+        print("action", action)
+
+        print("lettuces : ", self.state.lettuce_positions)
+        print("ponds : ", self.state.water_positions)
         return reward
-    '''
-    def reward(self, action):
-        reward = 0
-        if self.state.lettuce_here:
-            if action == 'eat':
-                reward += 5
-            else:
-                reward += -5
-
-        if self.state.lettuce_ahead:
-            if action == 'forward':
-                reward += 5
-            else :
-                reward += -5
-
-        if (self.state.water_here and action == 'drink' and self.state.drink_level < 20):
-            reward += 2
-        if (self.state.water_here and action == 'drink' and self.state.drink_level < 50):
-            reward += 1
-        if (self.state.water_here and action == 'drink' and self.state.drink_level < 75):
-            reward += 0.5
-
-        explored = 0
-        for i in self.state.worldmap:
-            if i != '?':
-                explored += 1
-        if explored < 0.2 * len(self.state.worldmap):
-            reward += -1
-        elif explored < 0.5 * len(self.state.worldmap):
-            reward += -1
-        elif explored < 0.7 * len(self.state.worldmap):
-            reward += -0.3
-
-        if ((not self.state.free_ahead) and action == 'forward'):
-            reward += -1
-
-        if (self.state.distance_manhattan(self.state.x, self.state.y, self.state.dogx, self.state.dogy) <= 5):
-            reward += -0.5
-        if (self.state.distance_manhattan(self.state.x, self.state.y, self.state.dogx, self.state.dogy) <= 5) and self.state.health_level < 20:
-            reward += -1
-
-        return reward
-        '''

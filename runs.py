@@ -28,7 +28,7 @@ def runs( agent, width, number ):
         filled_length = int(bar_length * i // number)
         bar = '#' * filled_length + ' ' * (bar_length - filled_length)
 
-        print(f'\rLearning iteration : {i} [{bar}] {percent:.2f}%', end='')
+        #print(f'\rLearning iteration : {i} [{bar}] {percent:.2f}%', end='')
 
         tortoise.init(width)
         tf = TortoiseFrame(width, 0, tortoise, True)
